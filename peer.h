@@ -4,6 +4,7 @@
 #define MAX_PEERS 10
 #define MAX_FILES 100
 #define MAX_FILENAME_LEN 256
+#define PAYLOAD_SIZE 1000 // Tamanho em bytes dos dados em si
 #define BUFFER_SIZE 1024 // Tamanho do buffer em bytes (pacote UDP)
 
 // Struct para representar um peer na rede

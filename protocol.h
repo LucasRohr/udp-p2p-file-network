@@ -1,6 +1,7 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+
 #define MAX_TRANSFERS 5 // O peer pode baixar até 5 arquivos simultaneamente
 
 #include "peer.h"
@@ -20,9 +21,6 @@ void initialize_transfers();
 
 // Envia um arquivo segmentado em partes
 void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address);
-
-// Recebe segmentos e remonta o arquivo
-void receive_file(const char* filename, const UDPMessage* message);
 
 // Requisita um arquivo
 void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_addr);
