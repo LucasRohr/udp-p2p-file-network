@@ -5,13 +5,23 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stddef.h>
 
 #include "protocol.h"
 
 const char* SYNC_DIR = "tmp/sync";
 
+ActiveTransfer transfers[MAX_TRANSFERS];
+
+// Inicializa array de transfers
+void initialize_transfers() {
+    for (int i = 0; i < MAX_TRANSFERS; i++) {
+        transfers[i].active = 0;
+    }
+}
+
 // Processa uma mensagem recebida
-void handle_message(int sockfd, const UDPMessage* message, const struct sockaddr_in* sender_address) {
+void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_received, const struct sockaddr_in* sender_address) {
     printf("Mensagem recebida: Endereço/Porta %s:%d - Tipo: %d\n", 
            inet_ntoa(sender_address->sin_addr), ntohs(sender_address->sin_port), message->type);
 
@@ -33,22 +43,122 @@ void handle_message(int sockfd, const UDPMessage* message, const struct sockaddr
             break;
 
         case FILE_RESPONSE_CHUNK:
+            {
+                // Se for o primeiro pacote, ele cria o registro da transferência
+                if (message->sequence_number == 0) {
+                    int transfer_index = -1;
+
+                    // Acha um slot livre para a nova transferência
+                    for (int i = 0; i < MAX_TRANSFERS; i++) {
+                        if (transfers[i].active == 0) {
+                            transfer_index = i;
+                            break;
+                        }
+                    }
+
+                    if (transfer_index == -1) {
+                        fprintf(stderr, "Não há slots de transferência disponíveis.\n");
+                        break; // Ignora o pacote
+                    }
+                    
+                    // Configura o novo registro de transferência
+                    ActiveTransfer* new_transfer = &transfers[transfer_index];
+                    new_transfer->active = 1;
+                    new_transfer->peer_address = *sender_address;
+                    new_transfer->last_seq_num = 0;
+                    
+                    // O payload tem "nome_do_arquivo.txt\0dados_do_arquivo..."
+                    // Copia o nome do arquivo
+                    strncpy(new_transfer->filename, message->payload, MAX_FILENAME_LEN - 1);
+                    new_transfer->filename[MAX_FILENAME_LEN - 1] = '\0';
+
+                    printf("Iniciando recebimento do arquivo: %s\n", new_transfer->filename);
+
+                    // Cria um nome de arquivo temporário
+                    snprintf(new_transfer->temp_filename, sizeof(new_transfer->temp_filename),
+                            "%s/%s.part", SYNC_DIR, new_transfer->filename);
+
+                    // Abre o arquivo temporário para escrita binária ("wb")
+                    new_transfer->file_ptr = fopen(new_transfer->temp_filename, "wb");
+
+                    if (!new_transfer->file_ptr) {
+                        perror("Falha ao criar arquivo temporário");
+                        new_transfer->active = 0; // Libera o slot
+                        break;
+                    }
+
+                    // Escreve os dados que vieram junto com o nome no primeiro pacote
+                    size_t filename_len = strlen(new_transfer->filename) + 1; // +1 para o '\0'
+
+                    // O tamanho total da mensagem vem do recvfrom(), passado em bytes_received
+                    size_t data_size = bytes_received - offsetof(UDPMessage, payload) - filename_len;
+
+                    fwrite(message->payload + filename_len, 1, data_size, new_transfer->file_ptr);
+
+                } else { // Pacotes a partir do primeiro
+                    int transfer_index = -1;
+
+                    // Acha a transferência ativa do remetente
+                    for (int i = 0; i < MAX_TRANSFERS; i++) {
+                        if (transfers[i].active &&
+                            transfers[i].peer_address.sin_addr.s_addr == sender_address->sin_addr.s_addr &&
+                            transfers[i].peer_address.sin_port == sender_address->sin_port) 
+                        {
+                            transfer_index = i;
+                            break;
+                        }
+                    }
+
+                    if (transfer_index != -1) {
+                        //Aceita pacotes em sequência
+                        if (message->sequence_number == transfers[transfer_index].last_seq_num + 1) {
+                            size_t data_size = bytes_received - offsetof(UDPMessage, payload);
+                            fwrite(message->payload, 1, data_size, transfers[transfer_index].file_ptr);
+                            transfers[transfer_index].last_seq_num++;
+                        }
+                    }
+                }
+            }
+            break;
+
         case FILE_RESPONSE_END:
-            // Lógica para remontar o arquivo
-            char file_path[512];
-            
-            // Abre o arquivo no modo de apêndice binário ('ab')
-            sprintf(file_path, "%s/%s", SYNC_DIR, "arquivo_recebido_temp.tmp"); // Nome temporário
-            FILE *file = fopen(file_path, "ab");
-            if (file) {
-                fwrite(message->payload, 1, strlen(message->payload), file);
-                fclose(file);
+            // A transferência de um arquivo terminou, precisando renomear ele
+            {
+                int transfer_index = -1;
+                // Acha a transferência ativa correspondente a este remetente
+                for (int i = 0; i < MAX_TRANSFERS; i++) {
+                    // Match de ativo, endereço e porta
+                    if (transfers[i].active &&
+                        transfers[i].peer_address.sin_addr.s_addr == sender_address->sin_addr.s_addr &&
+                        transfers[i].peer_address.sin_port == sender_address->sin_port) 
+                    {
+                        transfer_index = i;
+                        break;
+                    }
+                }
+
+                if (transfer_index != -1) {
+                    ActiveTransfer* transfer = &transfers[transfer_index];
+                    printf("Finalizando recebimento do arquivo: %s\n", transfer->filename);
+
+                    // Fecha o ponteiro do arquivo
+                    fclose(transfer->file_ptr);
+
+                    // Monta o caminho final do arquivo
+                    char final_filepath[512];
+                    snprintf(final_filepath, sizeof(final_filepath), "%s/%s", SYNC_DIR, transfer->filename);
+
+                    // Renomeia o arquivo de ".part" para o nome final
+                    if (rename(transfer->temp_filename, final_filepath) == 0) {
+                        printf("Arquivo %s salvo com sucesso!\n", transfer->filename);
+                    } else {
+                        perror("Falha ao renomear o arquivo final");
+                    }
+                    
+                    // Libera o slot de transferência
+                    transfer->active = 0;
+                }
             }
-            if (message->type == FILE_RESPONSE_END) {
-                printf("Transferência do arquivo finalizada.\n");
-                // Renomear arquivo temporário para o nome final
-            }
-            
             break;
 
         case UPDATE_ADD:

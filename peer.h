@@ -31,6 +31,7 @@ typedef enum {
 // Struct para representar uma mensagem no protocolo UDP, com tipo da mensagem e o dado em si
 typedef struct {
     MessageType type;
+    unsigned int sequence_number; // para segmentos (chunks) caso tenha fragmentação
     char payload[BUFFER_SIZE - sizeof(MessageType)];
 } UDPMessage;
 
