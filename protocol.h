@@ -19,15 +19,21 @@ typedef struct {
 void initialize_transfers();
 
 // Envia um arquivo segmentado em partes
-void send_file(int sockfd, const char* filename, const struct sockaddr_in* dest_address);
+void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address);
 
 // Recebe segmentos e remonta o arquivo
 void receive_file(const char* filename, const UDPMessage* message);
+
+// Requisita um arquivo
+void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_addr);
 
 // Envia a lista de arquivos locais para um peer
 void send_file_list(int sockfd, const struct sockaddr_in* dest_address);
 
 // Processa uma mensagem recebida
 void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_received, const struct sockaddr_in* sender_address);
+
+// Atualiza os peers com updates no diretório de arquivos
+void broadcast_update(int sockfd, const char* filename, MessageType type, const struct sockaddr_in peers[], int num_peers);
 
 #endif // PROTOCOL_H
