@@ -188,17 +188,81 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 
 // Envia um arquivo segmentado em partes
 void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address) {
+    char file_path[512];
+    sprintf(file_path, "%s/%s", SYNC_DIR, filename); // Constrói caminho do arquivo
 
+    FILE *file = fopen(file_path, "rb"); // Abre em modo de leitura binária (read binary)
+
+    if (!file) {
+        perror("Erro ao abrir arquivo para envio");
+        return;
+    }
+
+    UDPMessage message;
+    message.type = FILE_RESPONSE_CHUNK; // Tipo de envio em segmentos
+
+    size_t bytes_read;
+    unsigned int seq_num = 0;
+
+    // Lê o arquivo em pedaços e envia cada um como um pacote UDP
+    // Avança nos segmentos "cortando" conforme o valor de PAYLOAD_SIZE
+    while ((bytes_read = fread(message.payload, 1, PAYLOAD_SIZE, file)) > 0) {
+        message.sequence_number = seq_num++;
+        // Tamanho da mensagem = cabeçalho + bytes lidos
+        size_t message_size = sizeof(message.type) + sizeof(message.sequence_number) + bytes_read;
+
+        sendto(sockfd, &message, message_size, 0, (struct sockaddr*)dest_address, sizeof(*dest_address));
+        usleep(1000); // Pausa para evitar sobrecarga do buffer de destino (boa prática)
+    }
+
+    // Envia uma mensagem final para indicar o fim da transmissão
+    message.type = FILE_RESPONSE_END; // Tipo de envio indicando fim da transmissão
+    message.sequence_number = seq_num;
+    message.payload[0] = '\0'; // Payload vazia
+    sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)dest_address, sizeof(*dest_address));
+
+    fclose(file); // Fecha arquivo local
+    printf("Envio do arquivo %s concluído para %s:%d\n", filename, inet_ntoa(dest_address->sin_addr), ntohs(dest_address->sin_port));
 }
 
 // Requisita um arquivo
 void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_addr) {
-    
+
 }
 
 // Envia a lista de arquivos locais para um peer
 void send_file_list(int sockfd, const struct sockaddr_in* dest_address) {
+    DIR *directory;
+    struct dirent *direntry;
+    UDPMessage message;
+    
+    message.type = LIST_RESPONSE; // Tipo de envio de lista de arquivos
+    message.payload[0] = '\0'; // Inicia payload como string vazia
 
+    directory = opendir(SYNC_DIR); // Abre diretório pré definido
+
+    if (directory) { // Se abriu com sucesso
+        while ((direntry = readdir(directory)) != NULL) { // Enquanto houver entradas no diretório sync
+            // Ignora os diretórios '.' e '..'
+            if (strcmp(direntry->d_name, ".") == 0 || strcmp(direntry->d_name, "..") == 0) {
+                continue;
+            }
+
+            // Concatena o nome do arquivo no payload UDP, separado por vírgula
+            strncat(message.payload, direntry->d_name, PAYLOAD_SIZE - strlen(message.payload) - 1);
+            strncat(message.payload, ",", PAYLOAD_SIZE - strlen(message.payload) - 1);
+        }
+
+        closedir(directory); // Fecha diretório sync
+    } else {
+        perror("Não foi possível abrir o diretório de sincronização");
+        return;
+    }
+    
+    // Envia a mensagem contendo a lista de arquivos
+    sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)dest_address, sizeof(*dest_address));
+
+    printf("Lista de arquivos enviada para %s:%d\n", inet_ntoa(dest_address->sin_addr), ntohs(dest_address->sin_port));
 }
 
 // Atualiza os peers com updates no diretório de arquivos
