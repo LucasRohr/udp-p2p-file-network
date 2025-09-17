@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <sys/stat.h>
 
 #include "protocol.h"
 
@@ -20,6 +21,17 @@ void initialize_transfers() {
     }
 }
 
+// Verifica se o arquivo existe no diretório local (funcao auxiliar)
+int file_exists_locally(const char* filename) {
+    char file_path[512];
+    snprintf(file_path, sizeof(file_path), "%s/%s", SYNC_DIR, filename); // Monta caminho local com diretório sync
+
+    struct stat buffer;
+
+    // A função stat retorna 0 se o arquivo/caminho existir.
+    return (stat(file_path, &buffer) == 0);
+}
+
 // Processa uma mensagem recebida
 void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_received, const struct sockaddr_in* sender_address) {
     printf("Mensagem recebida: Endereço/Porta %s:%d - Tipo: %d\n", 
@@ -32,9 +44,40 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
             break;
 
         case LIST_RESPONSE:
-            printf("Payload: %s\n", message->payload);
-            // Lógica para comparar a lista recebida com a local e pedir arquivos faltantes
-            // Aqui você implementaria a comparação e chamaria request_file() se necessário
+            printf("Recebido LIST_RESPONSE de %s:%d. Verificando arquivos...\n",
+               inet_ntoa(sender_address->sin_addr), ntohs(sender_address->sin_port));
+
+            // strtok modifica a string, então precisa copiar o payload em nova variável
+            char payload_copy[PAYLOAD_SIZE];
+            strncpy(payload_copy, message->payload, PAYLOAD_SIZE);
+            payload_copy[PAYLOAD_SIZE - 1] = '\0';
+
+            // O delimitador para separar os nomes dos arquivos é vírgula
+            const char* delimiter = ",";
+            
+            // strtok retorna o primeiro "token" (nome de arquivo) da string
+            char* filename = strtok(payload_copy, delimiter);
+
+            // Loop processa todos os tokens encontrados
+            while (filename != NULL) {
+                // Remove espaços em branco no início
+                while (*filename == ' ') {
+                    filename++;
+                }
+
+                if (strlen(filename) > 0) {
+                    // Para cada arquivo na lista recebida, verifica se tem no local
+                    if (!file_exists_locally(filename)) {
+                        // Se não tem o arquivo, faz uma request
+                        printf("Arquivo '%s' não encontrado localmente. Solicitando...\n", filename);
+                        request_file(sockfd, filename, sender_address);
+                    }
+                }
+
+                // A chamada seguinte a strtok com NULL continua de onde parou na string original
+                filename = strtok(NULL, delimiter);
+            }
+
             break;
 
         case FILE_REQUEST:
@@ -226,8 +269,15 @@ void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in
 }
 
 // Requisita um arquivo
-void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_addr) {
+void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_address) {
+    UDPMessage message;
+    message.type = FILE_REQUEST; // Tipo para requisição de arquivo
 
+    strncpy(message.payload, filename, PAYLOAD_SIZE - 1);
+    message.payload[PAYLOAD_SIZE - 1] = '\0'; // Fim de string
+
+    sendto(sockfd, &message, sizeof(message), 0, (struct sockaddr*)dest_address, sizeof(*dest_address)); // Envia requisição para peer destino
+    printf("Solicitando o arquivo %s para %s:%d\n", filename, inet_ntoa(dest_address->sin_addr), ntohs(dest_address->sin_port));
 }
 
 // Envia a lista de arquivos locais para um peer

@@ -23,7 +23,7 @@ void initialize_transfers();
 void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address);
 
 // Requisita um arquivo
-void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_addr);
+void request_file(int sockfd, const char* filename, const struct sockaddr_in* dest_address);
 
 // Envia a lista de arquivos locais para um peer
 void send_file_list(int sockfd, const struct sockaddr_in* dest_address);
