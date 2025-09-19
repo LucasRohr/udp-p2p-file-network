@@ -21,28 +21,37 @@ int main(int argc, char *argv[]) {
     int num_peers = 0;
     struct sockaddr_in my_address;
 
-    char* static_peers[MAX_PEERS] = {'192.168.1.100:8000', '192.168.1.101:8000', '192.168.1.102:8000'};
-
     char* local_ip_port = argv[1];
+    char* peers_file = argv[2];
 
-    // Itera a lista de peers estaticos para inicializar a lista de peers com os endereços IP e portas dos peers
-    for (int i = 0; i < CURRENT_PEERS; i++) {
-        char* ip = strtok(static_peers[i], ":");
+    FILE* fp = fopen(peers_file, "r");
+
+    if (!fp) {
+        perror("Não foi possível abrir o arquivo de peers");
+        return 1;
+    }
+
+    // Itera o arquivo de peers estaticos para inicializar a lista de peers com os endereços IP e portas dos peers
+    char line[100];
+    while (fgets(line, sizeof(line), fp) && num_peers < MAX_PEERS) {
+        char* ip = strtok(line, ":");
         char* port = strtok(NULL, "\n");
-
+    
         if(ip) {
             peer_address_list[num_peers].sin_family = AF_INET;
             peer_address_list[num_peers].sin_port = htons(atoi(port));
             inet_pton(AF_INET, ip, &peer_address_list[num_peers].sin_addr);
-
+    
             // Verifica se esse peer é o peer local
-            if (strcmp(local_ip_port, static_peers[i]) == 0) {
-                 my_address = peer_address_list[num_peers];
+            if (strcmp(local_ip_port, line) == 0) {
+                my_address = peer_address_list[num_peers];
             }
-
+    
             num_peers++;
         }
     }
+
+    fclose(fp); // Fecha arquivo de peers
 
     // Configuracao do socket UDP
     _socket = socket(AF_INET, SOCK_DGRAM, 0);
