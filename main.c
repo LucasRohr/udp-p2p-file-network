@@ -1,14 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <dirent.h>
+#include <unistd.h>
 
-#include <protocol.h>
+#include "protocol.h"
 
 #define DIR_CHECK_INTERVAL 5 // Intervalo em segundos para checar o diretório sync
 #define CURRENT_PEERS 3
+
+const char* SYNC_DIRC = "tmp/sync";
 
 // Thread Servidor: Escuta por mensagens
 void* server_thread_func(int* _socket, struct sockaddr_in* my_address) {
@@ -42,8 +47,94 @@ void* server_thread_func(int* _socket, struct sockaddr_in* my_address) {
     return NULL;
 }
 
-// Thread Cliente: Verifica o diretório por mudanças ---
-void* client_thread_func(void* arg) {
+// Thread Cliente: Verifica o diretório por mudanças
+void* client_thread_func(int* _socket, struct sockaddr_in* peer_address_list, int num_peers) {
+    char known_files[MAX_FILES][MAX_FILENAME_LEN];
+    int num_known_files = 0;
+
+    // Preenche o estado inicial dos arquivos
+    DIR *directory = opendir(SYNC_DIRC); // Abre dir
+
+    struct dirent *direntry;
+
+    if (directory) {
+        while ((direntry = readdir(directory)) != NULL) {
+            if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0) { // Ignora os diretórios '.' e '..'
+                strncpy(known_files[num_known_files++], direntry->d_name, MAX_FILENAME_LEN - 1); // Incrementa known files e copia nome do arquivo
+            }
+        }
+
+        closedir(directory); // Fecha dir
+    }
+
+    printf("Thread cliente iniciada. Estado inicial com %d arquivos.\n", num_known_files);
+
+    while (1) {
+        sleep(DIR_CHECK_INTERVAL); // Aguarda tempo de chacagem
+
+        char current_files[MAX_FILES][MAX_FILENAME_LEN];
+        int num_current_files = 0;
+        
+        directory = opendir(SYNC_DIRC);
+
+        if (!directory) {
+            perror("Cliente: Não foi possível abrir o diretório de sincronização");
+            continue;
+        }
+
+        while ((direntry = readdir(directory)) != NULL) {
+             if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0) { // Ignora os diretórios '.' e '..'
+                strncpy(current_files[num_current_files++], direntry->d_name, MAX_FILENAME_LEN - 1); // Atualiza arquivos atuais na checagem
+            }
+        }
+
+        closedir(directory);
+
+        // Verifica por arquivos ADICIONADOS
+        for (int i = 0; i < num_current_files; i++) {
+            int found = 0;
+
+            // Verifica se tem algum arquivo nos currents que nao eh conhecido, quer dizer que encontrou um novo
+            for (int j = 0; j < num_known_files; j++) {
+                if (strcmp(current_files[i], known_files[j]) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found) {
+                printf("Cliente - Novo arquivo detectado: %s. Notificando peers...\n", current_files[i]);
+                broadcast_update(*_socket, current_files[i], UPDATE_ADD, peer_address_list, num_peers);
+            }
+        }
+
+        // Verifica por arquivos REMOVIDOS
+        for (int i = 0; i < num_known_files; i++) {
+            int found = 0;
+
+            // Verifica se tem um arquivo conhecido que nao estah mais nos current, quer dizer que foi removido
+            for (int j = 0; j < num_current_files; j++) {
+                if (strcmp(known_files[i], current_files[j]) == 0) {
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found) {
+                printf("Cliente - Arquivo removido detectado: %s. Notificando peers...\n", known_files[i]);
+                broadcast_update(*_socket, known_files[i], UPDATE_REMOVE, peer_address_list, num_peers);
+            }
+        }
+
+        // Atualiza a lista de arquivos conhecidos com a lista de arquivos atuais, para a próxima verificação
+        num_known_files = num_current_files;
+
+        for(int i = 0; i < num_current_files; i++) {
+            strcpy(known_files[i], current_files[i]);
+        }
+    }
+
+    return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -111,7 +202,7 @@ int main(int argc, char *argv[]) {
     // Cria as threads
     pthread_t server_tid, client_tid;
     pthread_create(&server_tid, NULL, server_thread_func(&_socket, &my_address), NULL);
-    pthread_create(&client_tid, NULL, client_thread_func, NULL);
+    pthread_create(&client_tid, NULL, client_thread_func(&_socket, peer_address_list, num_peers), NULL);
 
     // Espera as threads terminarem (quando "exit" for enviado)
     pthread_join(server_tid, NULL);
