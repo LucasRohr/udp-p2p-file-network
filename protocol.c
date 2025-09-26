@@ -10,7 +10,7 @@
 
 #include "protocol.h"
 
-const char* SYNC_DIR = "tmp/sync";
+const char* SYNC_DIR = "Documents/sync";
 
 ActiveTransfer transfers[MAX_TRANSFERS];
 
