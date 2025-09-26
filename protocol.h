@@ -3,6 +3,7 @@
 
 
 #define MAX_TRANSFERS 5 // O peer pode baixar até 5 arquivos simultaneamente
+#define MAX_PATH_LEN 512 // Tamanho maximo para nome do diretório sync
 
 #include "peer.h"
 
@@ -11,7 +12,7 @@ typedef struct {
     int active; // 0 = inativo, 1 = ativo
     struct sockaddr_in peer_address;
     char filename[MAX_FILENAME_LEN];
-    char temp_filename[MAX_FILENAME_LEN + 5];
+    char temp_filename[MAX_PATH_LEN];
     FILE* file_ptr; // Ponteiro para o arquivo temp
     unsigned int last_seq_num;
 } ActiveTransfer;

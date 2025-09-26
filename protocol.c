@@ -213,7 +213,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
             printf("Removendo arquivo %s localmente...\n", message->payload);
             char file_to_remove[512];
 
-            sprintf(file_to_remove, "%s/%s", SYNC_DIR, message->payload);
+            snprintf(file_to_remove, sizeof(file_to_remove), "%s/%s", SYNC_DIR, message->payload);
 
             if (remove(file_to_remove) == 0) {
                 printf("Arquivo %s removido com sucesso.\n", message->payload);
