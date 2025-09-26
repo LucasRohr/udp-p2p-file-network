@@ -211,7 +211,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 
         case UPDATE_REMOVE:
             printf("Removendo arquivo %s localmente...\n", message->payload);
-            char file_to_remove[512];
+            char file_to_remove[MAX_PATH_LEN];
 
             snprintf(file_to_remove, sizeof(file_to_remove), "%s/%s", SYNC_DIR, message->payload);
 
