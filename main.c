@@ -13,6 +13,8 @@
 #define DIR_CHECK_INTERVAL 5 // Intervalo em segundos para checar o diretório sync
 #define CURRENT_PEERS 3
 
+char SYNC_DIR[MAX_PATH_LEN];
+
 // Struct para os args da thread do servidor
 typedef struct {
     int* socket_fd;

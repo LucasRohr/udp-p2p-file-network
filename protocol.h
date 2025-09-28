@@ -3,11 +3,11 @@
 
 
 #define MAX_TRANSFERS 5 // O peer pode baixar até 5 arquivos simultaneamente
-#define MAX_PATH_LEN 512 // Tamanho maximo para nome do diretório sync
+#define MAX_PATH_LEN 1280 // Tamanho maximo para nome do diretório sync
 
 #include "peer.h"
 
-char SYNC_DIR[MAX_PATH_LEN];
+extern char SYNC_DIR[MAX_PATH_LEN];
 
 // Struct para gerenciar o estado de um download ativo para casos de segmentação
 typedef struct {

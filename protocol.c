@@ -230,7 +230,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 // Envia um arquivo segmentado em partes
 void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address) {
     char file_path[512];
-    sprintf(file_path, "%s/%s", SYNC_DIR, filename); // Constrói caminho do arquivo
+    snprintf(file_path, sizeof(file_path), "%s/%s", SYNC_DIR, filename); // Constrói caminho do arquivo
 
     FILE *file = fopen(file_path, "rb"); // Abre em modo de leitura binária (read binary)
 
