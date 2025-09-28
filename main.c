@@ -25,6 +25,7 @@ typedef struct {
 typedef struct {
     int* socket_fd;
     struct sockaddr_in* peer_list;
+    struct sockaddr_in* my_address;
     int num_peers;
 } ClientThreadArgs;
 
@@ -74,6 +75,7 @@ void* client_thread_func(void* args) {
 
     int* _socket = client_args->socket_fd;
     struct sockaddr_in* peer_address_list = client_args->peer_list;
+    struct sockaddr_in* my_address = client_args->my_address;
     int num_peers = client_args->num_peers;
 
     // Variaveis locais da thread
@@ -96,6 +98,21 @@ void* client_thread_func(void* args) {
     }
 
     printf("Thread cliente iniciada. Estado inicial com %d arquivos.\n", num_known_files);
+
+    // Ao iniciar, o peer pede a lista de arquivos para todos os outros pra poder se sincronizar
+    printf("Peer Boot: Solicitando lista de arquivos da rede...\n");
+
+    UDPMessage list_request_message;
+    list_request_message.type = LIST_REQUEST;
+    list_request_message.payload[0] = '\0'; // Sem payload necessário
+    
+    for (int i = 0; i < num_peers; i++) {
+        // Envia para todos, menos para si mesmo
+        if (peer_address_list[i].sin_addr.s_addr == my_address->sin_addr.s_addr && peer_address_list[i].sin_port == my_address->sin_port) {
+            continue;
+        }
+        sendto(*_socket, &list_request_message, sizeof(list_request_message), 0, (struct sockaddr*)&peer_address_list[i], sizeof(peer_address_list[i]));
+    }
 
     while (1) {
         sleep(DIR_CHECK_INTERVAL); // Aguarda tempo de chacagem
@@ -261,6 +278,7 @@ int main(int argc, char *argv[]) {
     ClientThreadArgs client_args;
     client_args.socket_fd = &_socket;
     client_args.peer_list = peer_address_list;
+    client_args.my_address = &my_address;
     client_args.num_peers = num_peers;
 
 

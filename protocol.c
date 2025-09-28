@@ -229,7 +229,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 
 // Envia um arquivo segmentado em partes
 void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in* dest_address) {
-    char file_path[512];
+    char file_path[MAX_PATH_LEN];
     snprintf(file_path, sizeof(file_path), "%s/%s", SYNC_DIR, filename); // Constrói caminho do arquivo
 
     FILE *file = fopen(file_path, "rb"); // Abre em modo de leitura binária (read binary)
@@ -240,17 +240,36 @@ void send_file_chunks(int sockfd, const char* filename, const struct sockaddr_in
     }
 
     UDPMessage message;
-    message.type = FILE_RESPONSE_CHUNK; // Tipo de envio em segmentos
-
     size_t bytes_read;
     unsigned int seq_num = 0;
 
-    // Lê o arquivo em pedaços e envia cada um como um pacote UDP
+    // Monta o primeiro pacote (seq_num = 0) com o nome do arquivo no payload
+    message.type = FILE_RESPONSE_CHUNK; // Tipo de envio em segmentos
+    message.sequence_number = seq_num++;
+
+    // 1. Copia o nome do arquivo para o início do payload
+    strncpy(message.payload, filename, MAX_FILENAME_LEN - 1);
+    size_t filename_len = strlen(filename) + 1; // +1 pro terminador null '\0'
+
+    // 2. Calcula o espaço restante no payload para os dados do arquivo
+    size_t remaining_space = PAYLOAD_SIZE - filename_len;
+
+    // 3. Lê os primeiros dados do arquivo para o espaço restante do payload
+    bytes_read = fread(message.payload + filename_len, 1, remaining_space, file);
+    
+    // 4. Envia o primeiro pacote especial contendo filename junto
+    size_t first_message_size = offsetof(UDPMessage, payload) + filename_len + bytes_read;
+    sendto(sockfd, &message, first_message_size, 0, (struct sockaddr*)dest_address, sizeof(*dest_address));
+    usleep(1000); // Pausa para evitar sobrecarga do buffer de destino (boa prática)
+
+    // Lê o restante arquivo em segmentos e envia cada um como um pacote UDP
     // Avança nos segmentos "cortando" conforme o valor de PAYLOAD_SIZE
     while ((bytes_read = fread(message.payload, 1, PAYLOAD_SIZE, file)) > 0) {
+        message.type = FILE_RESPONSE_CHUNK;
         message.sequence_number = seq_num++;
+
         // Tamanho da mensagem = cabeçalho + bytes lidos
-        size_t message_size = sizeof(message.type) + sizeof(message.sequence_number) + bytes_read;
+        size_t message_size = offsetof(UDPMessage, payload) + bytes_read;
 
         sendto(sockfd, &message, message_size, 0, (struct sockaddr*)dest_address, sizeof(*dest_address));
         usleep(1000); // Pausa para evitar sobrecarga do buffer de destino (boa prática)
