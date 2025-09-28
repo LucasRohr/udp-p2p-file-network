@@ -7,6 +7,8 @@
 
 #include "peer.h"
 
+char SYNC_DIR[MAX_PATH_LEN];
+
 // Struct para gerenciar o estado de um download ativo para casos de segmentação
 typedef struct {
     int active; // 0 = inativo, 1 = ativo

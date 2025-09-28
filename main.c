@@ -13,8 +13,6 @@
 #define DIR_CHECK_INTERVAL 5 // Intervalo em segundos para checar o diretório sync
 #define CURRENT_PEERS 3
 
-const char* SYNC_DIRC = "Documents/sync";
-
 // Struct para os args da thread do servidor
 typedef struct {
     int* socket_fd;
@@ -81,7 +79,7 @@ void* client_thread_func(void* args) {
     int num_known_files = 0;
 
     // Preenche o estado inicial dos arquivos
-    DIR *directory = opendir(SYNC_DIRC); // Abre dir
+    DIR *directory = opendir(SYNC_DIR); // Abre dir
 
     struct dirent *direntry;
 
@@ -103,7 +101,7 @@ void* client_thread_func(void* args) {
         char current_files[MAX_FILES][MAX_FILENAME_LEN];
         int num_current_files = 0;
         
-        directory = opendir(SYNC_DIRC);
+        directory = opendir(SYNC_DIR);
 
         if (!directory) {
             perror("Cliente: Não foi possível abrir o diretório de sincronização");
@@ -170,6 +168,18 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Execucao de peer incorreta. Uso correto: %s <meu_ip:porta> <arquivo_peers.conf>\n", argv[0]);
         return 1;
     }
+
+    // Lógica para buscar o diretório de sync a partir do caminho HOME do sistema operacional
+    const char* home_dir = getenv("HOME");
+
+    if (home_dir == NULL) {
+        fprintf(stderr, "Erro: Não foi possível encontrar a variável de ambiente HOME.\n");
+        return 1;
+    }
+
+    snprintf(SYNC_DIR, sizeof(SYNC_DIR), "%s/Documents/sync", home_dir);
+
+    printf("Diretório de sincronização definido como: %s\n", SYNC_DIR);
 
     int _socket;
     struct sockaddr_in peer_address_list[MAX_PEERS];
