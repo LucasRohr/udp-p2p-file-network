@@ -32,17 +32,17 @@ int file_exists_locally(const char* filename) {
 
 // Processa uma mensagem recebida
 void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_received, const struct sockaddr_in* sender_address) {
-    printf("Mensagem recebida: Endereço/Porta %s:%d - Tipo: %d\n", 
+    printf("\nMensagem recebida: Endereço/Porta %s:%d - Tipo: %d\n", 
            inet_ntoa(sender_address->sin_addr), ntohs(sender_address->sin_port), message->type);
 
     switch (message->type) {
         case LIST_REQUEST:
-            printf("Enviando lista de arquivos...\n");
+            printf("[LIST_REQUEST] Enviando lista de arquivos...\n");
             send_file_list(sockfd, sender_address);
             break;
 
         case LIST_RESPONSE:
-            printf("Recebido LIST_RESPONSE de %s:%d. Verificando arquivos...\n",
+            printf("[LIST_RESPONSE] Recebido LIST_RESPONSE de %s:%d. Verificando arquivos...\n",
                inet_ntoa(sender_address->sin_addr), ntohs(sender_address->sin_port));
 
             // strtok modifica a string, então precisa copiar o payload em nova variável
@@ -79,7 +79,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
             break;
 
         case FILE_REQUEST:
-            printf("Arquivo requisitado: %s\n", message->payload);
+            printf("[FILE_REQUEST] Arquivo requisitado: %s\n", message->payload);
             send_file_chunks(sockfd, message->payload, sender_address);
             break;
 
@@ -113,7 +113,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
                     strncpy(new_transfer->filename, message->payload, MAX_FILENAME_LEN - 1);
                     new_transfer->filename[MAX_FILENAME_LEN - 1] = '\0';
 
-                    printf("Iniciando recebimento do arquivo: %s\n", new_transfer->filename);
+                    printf("[FILE_RESPONSE_CHUNK] Iniciando recebimento do arquivo: %s\n", new_transfer->filename);
 
                     // Cria um nome de arquivo temporário
                     snprintf(new_transfer->temp_filename, sizeof(new_transfer->temp_filename),
@@ -133,6 +133,9 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 
                     // O tamanho total da mensagem vem do recvfrom(), passado em bytes_received
                     size_t data_size = bytes_received - offsetof(UDPMessage, payload) - filename_len;
+
+                    printf("Recebido CHUNK #%u (inicial) para o arquivo '%s', contendo %zd bytes de dados\n",
+                           message->sequence_number, new_transfer->filename, data_size);
 
                     fwrite(message->payload + filename_len, 1, data_size, new_transfer->file_ptr);
 
@@ -154,6 +157,10 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
                         //Aceita pacotes em sequência
                         if (message->sequence_number == transfers[transfer_index].last_seq_num + 1) {
                             size_t data_size = bytes_received - offsetof(UDPMessage, payload);
+
+                            printf("Recebido CHUNK #%u para o arquivo '%s', contendo %zd bytes\n",
+                                   message->sequence_number, transfers[transfer_index].filename, data_size);
+
                             fwrite(message->payload, 1, data_size, transfers[transfer_index].file_ptr);
                             transfers[transfer_index].last_seq_num++;
                         }
@@ -180,7 +187,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
 
                 if (transfer_index != -1) {
                     ActiveTransfer* transfer = &transfers[transfer_index];
-                    printf("Finalizando recebimento do arquivo: %s\n", transfer->filename);
+                    printf("[FILE_RESPONSE_END] Finalizando recebimento do arquivo: %s\n", transfer->filename);
 
                     // Fecha o ponteiro do arquivo
                     fclose(transfer->file_ptr);
@@ -203,12 +210,12 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
             break;
 
         case UPDATE_ADD:
-            printf("Solicitando arquivo %s...\n", message->payload);
+            printf("[UPDATE_ADD] Solicitando arquivo %s...\n", message->payload);
             request_file(sockfd, message->payload, sender_address);
             break;
 
         case UPDATE_REMOVE:
-            printf("Removendo arquivo %s localmente...\n", message->payload);
+            printf("[UPDATE_REMOVE] Removendo arquivo %s localmente...\n", message->payload);
             char file_to_remove[MAX_PATH_LEN];
 
             snprintf(file_to_remove, sizeof(file_to_remove), "%s/%s", SYNC_DIR, message->payload);
@@ -222,7 +229,7 @@ void handle_message(int sockfd, const UDPMessage* message, ssize_t bytes_receive
             break;
 
         default:
-            printf("Tipo de mensagem desconhecido: %d\n", message->type);
+            printf("[ERROR] Tipo de mensagem desconhecido: %d\n", message->type);
             break;
     }
 }
