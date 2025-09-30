@@ -11,7 +11,6 @@
 #include "protocol.h"
 
 #define DIR_CHECK_INTERVAL 5 // Intervalo em segundos para checar o diretório sync
-#define CURRENT_PEERS 3
 
 char SYNC_DIR[MAX_PATH_LEN];
 
