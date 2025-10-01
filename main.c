@@ -251,6 +251,8 @@ int main(int argc, char *argv[]) {
 
     if (_socket < 0) {
         printf("Erro na criacao do Socket\n");
+
+        return 1;
     }
 
     if (bind(_socket, (struct sockaddr*)&my_address, sizeof(my_address)) < 0) {
@@ -284,7 +286,7 @@ int main(int argc, char *argv[]) {
     pthread_create(&server_tid, NULL, server_thread_func, &server_args); // Cria thread do servidor passando args
     pthread_create(&client_tid, NULL, client_thread_func, &client_args); // Cria thread do cliente passando args
 
-    // Espera as threads terminarem (quando "exit" for enviado)
+    // Espera as threads terminarem
     pthread_join(server_tid, NULL);
     pthread_join(client_tid, NULL);
 
