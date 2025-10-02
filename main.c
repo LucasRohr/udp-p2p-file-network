@@ -88,7 +88,8 @@ void* client_thread_func(void* args) {
 
     if (directory) {
         while ((direntry = readdir(directory)) != NULL) {
-            if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0) { // Ignora os diretórios '.' e '..'
+            // Ignora os diretórios '.', '..' e .DS_Store
+            if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0 && strcmp(direntry->d_name, ".DS_Store") != 0) {
                 strncpy(known_files[num_known_files++], direntry->d_name, MAX_FILENAME_LEN - 1); // Incrementa known files e copia nome do arquivo
             }
         }
@@ -97,6 +98,12 @@ void* client_thread_func(void* args) {
     }
 
     printf("Thread cliente iniciada. Estado inicial com %d arquivos.\n", num_known_files);
+
+    if (num_known_files > 0) {
+        for (int i = 0; i < num_known_files; i++) {
+            printf("Arquivo %d: %s \n", i + 1, known_files[i]);
+        }
+    }
 
     // Ao iniciar, o peer pede a lista de arquivos para todos os outros pra poder se sincronizar
     printf("Peer Boot: Solicitando lista de arquivos da rede...\n");
@@ -127,7 +134,8 @@ void* client_thread_func(void* args) {
         }
 
         while ((direntry = readdir(directory)) != NULL) {
-             if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0) { // Ignora os diretórios '.' e '..'
+            // Ignora os diretórios '.', '..' e .DS_Store
+             if (strcmp(direntry->d_name, ".") != 0 && strcmp(direntry->d_name, "..") != 0 && strcmp(direntry->d_name, ".DS_Store") != 0) {
                 strncpy(current_files[num_current_files++], direntry->d_name, MAX_FILENAME_LEN - 1); // Atualiza arquivos atuais na checagem
             }
         }

@@ -317,8 +317,8 @@ void send_file_list(int sockfd, const struct sockaddr_in* dest_address) {
 
     if (directory) { // Se abriu com sucesso
         while ((direntry = readdir(directory)) != NULL) { // Enquanto houver entradas no diretório sync
-            // Ignora os diretórios '.' e '..'
-            if (strcmp(direntry->d_name, ".") == 0 || strcmp(direntry->d_name, "..") == 0) {
+            // Ignora os diretórios '.', '..' e .DS_Store
+            if (strcmp(direntry->d_name, ".") == 0 || strcmp(direntry->d_name, "..") == 0 || strcmp(direntry->d_name, ".DS_Store") == 0) {
                 continue;
             }
 
